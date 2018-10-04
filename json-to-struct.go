@@ -197,6 +197,26 @@ func readFile(input io.Reader) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
+func extraMethods(structName string) string {
+	return fmt.Sprintf(`
+	func (a *%s) ensureEncoded() {
+		if a.err == nil && a.encoded == nil {
+			a.encoded, a.err = json.Marshal(a)
+		}
+	}
+	
+	func (a *%s) Length() int {
+		a.ensureEncoded()
+		return len(a.encoded)
+	}
+	func (a *%s) Encode() ([]byte, error) {
+		a.ensureEncoded()
+		return a.encoded, a.err
+	}
+	`,
+		structName, structName, structName)
+}
+
 // Generate a struct definition given a JSON string representation of an object and a name structName.
 func Generate(input io.Reader, parser Parser, structName, pkgName string, tags []string, subStruct bool, convertFloats bool) ([]byte, error) {
 	var subStructMap map[string]string = nil
@@ -230,10 +250,11 @@ func Generate(input io.Reader, parser Parser, structName, pkgName string, tags [
 		return nil, fmt.Errorf("unexpected type: %T", iresult)
 	}
 
-	src := fmt.Sprintf("package %s\ntype %s %s}",
+	src := fmt.Sprintf("package %s\nimport \"encoding/json\"\ntype %s %s\nencoded []byte\nerr error\n}\n%s",
 		pkgName,
 		structName,
-		generateTypes(result, structName, tags, 0, subStructMap, convertFloats))
+		generateTypes(result, structName, tags, 0, subStructMap, convertFloats),
+		extraMethods(structName))
 
 	keys := make([]string, 0, len(subStructMap))
 	for key := range subStructMap {
